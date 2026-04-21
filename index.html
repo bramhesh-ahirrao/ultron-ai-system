@@ -221,6 +221,7 @@
       40% { transform: scale(1); }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
 <body>
@@ -252,6 +253,9 @@
   </div>
 
   <script>
+    // Store session globally
+    let userSession = localStorage.getItem('brainy_session_id') || null;
+
     async function sendMsg() {
       let inputField = document.getElementById("msg");
       let message = inputField.value.trim();
@@ -273,12 +277,21 @@
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ message: message })
+          body: JSON.stringify({ 
+            message: message,
+            session_id: userSession
+          })
         });
 
         if (!res.ok) throw new Error("Network issue");
 
         let data = await res.json();
+        
+        // Store session ID
+        if (data.session_id && !userSession) {
+          userSession = data.session_id;
+          localStorage.setItem('brainy_session_id', userSession);
+        }
         
         // Remove typing indicator and add AI response
         removeMessage(loadingId);
@@ -286,7 +299,7 @@
         
       } catch (error) {
         removeMessage(loadingId);
-        addMessage("⚠️ Oops! Something went wrong. Make sure the Flask server is running.", "ai");
+        addMessage("⚠️ Oops! Something went wrong.", "ai");
       }
     }
 
@@ -298,7 +311,7 @@
       
       let bubble = document.createElement("div");
       bubble.className = "bubble";
-      bubble.innerText = text;
+      bubble.innerHTML = sender === "ai" ? marked.parse(text) : text;
       
       msgDiv.appendChild(bubble);
       chatBox.appendChild(msgDiv);
