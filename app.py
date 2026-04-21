@@ -93,8 +93,8 @@ Every response should make the user think:
 "Wow, that was exactly what I needed."
 """
 
-# We are using the Gemini Pro Latest model for best balance and reliability
-model = genai.GenerativeModel('gemini-pro-latest')
+# We are using the Gemini 1.5 Flash model for best performance and higher quota limits
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- Global Memory ---
 # Dictionary to store each user's running chat history
