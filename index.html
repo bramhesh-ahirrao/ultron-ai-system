@@ -1,395 +1,391 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Brainy AI</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ULTRON | Neural Command Terminal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #ff0000;
+            --bg: #050505;
+            --sidebar-bg: #080808;
+            --text: #e2e8f0;
+            --border-red: rgba(255, 0, 0, 0.3);
+            --glow: 0 0 15px rgba(255, 0, 0, 0.4);
+        }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      font-family: 'Inter', sans-serif;
-      background: radial-gradient(circle at top left, #2e1065, #000000);
-      color: #e2e8f0;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
+        body {
+            background-color: var(--bg);
+            background-image: radial-gradient(circle at 50% 50%, rgba(255, 0, 0, 0.08) 0%, transparent 80%);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
 
-    .chat-container {
-      width: 90%;
-      max-width: 480px;
-      height: 85vh;
-      background: rgba(255, 255, 255, 0.03);
-      backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 24px;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
-      overflow: hidden;
-    }
+        /* Scanline & Grid Effect */
+        body::before {
+            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 4px, 3px 100%; pointer-events: none; z-index: 100; opacity: 0.4;
+        }
 
-    .header {
-      padding: 20px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      background: rgba(0, 0, 0, 0.2);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
+        .grid-bg {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: linear-gradient(rgba(255, 0, 0, 0.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255, 0, 0, 0.05) 1px, transparent 1px);
+            background-size: 50px 50px; pointer-events: none; z-index: 0; opacity: 0.3;
+            animation: gridPulse 10s infinite ease-in-out;
+        }
 
-    .header h2 {
-      font-size: 1.25rem;
-      font-weight: 600;
-      background: linear-gradient(to right, #38bdf8, #a78bfa);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
+        @keyframes gridPulse { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.4; } }
 
-    .bot-avatar {
-      width: 36px;
-      height: 36px;
-      background: linear-gradient(135deg, #075985, #4c1d95);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.2rem;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
+        /* Sidebar */
+        .sidebar {
+            width: 320px; background: var(--sidebar-bg); border-right: 1px solid var(--border-red);
+            display: flex; flex-direction: column; padding: 40px; z-index: 10;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative;
+        }
 
-    .chat-box {
-      flex: 1;
-      padding: 20px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      scroll-behavior: smooth;
-    }
+        .toggle-btn {
+            position: absolute; top: 15px; right: 15px; background: transparent;
+            border: 1px solid var(--border-red); color: var(--text); width: 30px; height: 30px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; transition: all 0.3s; z-index: 20;
+        }
 
-    .chat-box::-webkit-scrollbar {
-      width: 6px;
-    }
-    .chat-box::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-    }
+        .sidebar.collapsed { width: 80px; padding: 60px 10px 40px 10px; }
+        .sidebar.collapsed .sidebar-header, .sidebar.collapsed .status-badge, .sidebar.collapsed .menu-item span { display: none; }
+        .sidebar.collapsed .menu-item { text-align: center; justify-content: center; padding: 15px 0; }
+        .sidebar.collapsed .menu-item::before { content: attr(data-icon); font-family: 'Orbitron', sans-serif; font-size: 1.2rem; color: var(--primary); }
 
-    .message {
-      max-width: 85%;
-      animation: fadeIn 0.3s ease;
-      display: flex;
-      flex-direction: column;
-    }
+        .sidebar-header h2 { font-family: 'Orbitron', sans-serif; font-size: 1.5rem; color: var(--primary); letter-spacing: 6px; text-shadow: var(--glow); margin-bottom: 10px; }
+        
+        .status-badge {
+            font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: var(--primary);
+            padding: 5px 12px; border: 1px solid var(--border-red); display: inline-flex;
+            align-items: center; gap: 8px; background: rgba(255, 0, 0, 0.05); margin-bottom: 50px;
+        }
 
-    .message.user {
-      align-self: flex-end;
-    }
+        .status-dot { width: 8px; height: 8px; background: var(--primary); border-radius: 50%; box-shadow: 0 0 10px var(--primary); animation: flicker 2s infinite; }
+        @keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-    .message.ai {
-      align-self: flex-start;
-    }
+        .menu-list { list-style: none; display: flex; flex-direction: column; gap: 15px; }
+        .menu-item {
+            padding: 15px; font-family: 'Orbitron', sans-serif; font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5); cursor: pointer; border: 1px solid transparent;
+            transition: all 0.3s; letter-spacing: 2px; display: flex; align-items: center;
+        }
+        .menu-item:hover { background: rgba(255, 0, 0, 0.1); border-color: var(--border-red); color: var(--primary); }
 
-    .bubble {
-      padding: 12px 16px;
-      border-radius: 18px;
-      font-size: 0.95rem;
-      line-height: 1.5;
-      white-space: pre-wrap;
-    }
+        /* Main Console */
+        .main-console { flex: 1; display: flex; flex-direction: column; position: relative; }
+        
+        .header {
+            padding: 20px 40px; border-bottom: 1px solid var(--border-red); background: rgba(0, 0, 0, 0.5);
+            display: flex; justify-content: space-between; font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem; letter-spacing: 2px; color: rgba(255, 0, 0, 0.7);
+        }
 
-    .message.user .bubble {
-      background: linear-gradient(135deg, #0ea5e9, #6366f1);
-      color: white;
-      border-bottom-right-radius: 4px;
-    }
+        #chat-window {
+            flex: 1; overflow-y: auto; padding: 40px; display: flex; flex-direction: column;
+            gap: 20px; scrollbar-width: thin; scrollbar-color: var(--primary) transparent;
+        }
 
-    .message.ai .bubble {
-      background: rgba(255, 255, 255, 0.1);
-      color: #e0e0e0;
-      border-bottom-left-radius: 4px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-    }
+        .message-row { display: flex; flex-direction: column; max-width: 90%; }
+        .user-row { align-self: flex-end; align-items: flex-end; }
+        .ai-row { align-self: flex-start; align-items: flex-start; }
+        .system-row { align-self: center; align-items: center; width: 100%; }
 
-    .input-area {
-      padding: 16px;
-      background: rgba(0, 0, 0, 0.3);
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
+        .message { padding: 15px 25px; font-size: 0.9rem; line-height: 1.6; backdrop-filter: blur(5px); }
+        .message-header { font-family: 'Orbitron', sans-serif; font-size: 0.6rem; margin-bottom: 5px; letter-spacing: 2px; display: flex; gap: 10px; opacity: 0.7; }
+        
+        .user-message { background: rgba(30, 30, 30, 0.4); border-right: 3px solid #666; color: #fff; }
+        .ai-message { background: rgba(255, 0, 0, 0.03); border: 1px solid var(--border-red); border-left: 3px solid var(--primary); }
+        .system-message { background: transparent; color: var(--primary); text-align: center; border: 1px solid var(--border-red); font-family: 'Orbitron', sans-serif; font-size: 0.7rem; width: fit-content; margin: 0 auto; }
 
-    .upload-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 8px;
-    }
-    
-    .upload-btn svg {
-      fill: #38bdf8;
-      width: 24px;
-      height: 24px;
-      transition: all 0.3s;
-    }
+        .timestamp { opacity: 0.5; }
 
-    .upload-btn:hover svg {
-      transform: scale(1.1);
-      fill: #ec4899;
-    }
+        /* Input Area */
+        .input-container { padding: 40px; background: rgba(0, 0, 0, 0.8); border-top: 1px solid var(--border-red); backdrop-filter: blur(20px); }
+        .input-wrapper { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto; align-items: center; }
 
-    input {
-      flex: 1;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 20px;
-      padding: 12px 20px;
-      color: white;
-      font-size: 0.95rem;
-      font-family: 'Inter', sans-serif;
-      outline: none;
-      transition: all 0.3s;
-    }
+        .upload-btn {
+            background: transparent; border: 1px solid var(--border-red); color: var(--primary);
+            width: 55px; height: 55px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: 0.3s; font-size: 1.2rem;
+        }
+        .upload-btn:hover { background: rgba(255, 0, 0, 0.1); box-shadow: var(--glow); }
 
-    input:focus {
-      border-color: #a855f7;
-      background: rgba(255, 255, 255, 0.1);
-      box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
-    }
+        input {
+            flex: 1; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-red);
+            padding: 18px 25px; color: #fff; outline: none; transition: 0.3s; font-size: 0.95rem;
+        }
+        input:focus { border-color: var(--primary); box-shadow: inset 0 0 10px rgba(255, 0, 0, 0.1); }
 
-    button {
-      background: linear-gradient(135deg, #38bdf8, #6366f1);
-      border: none;
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.3s;
-    }
+        #transmit-btn {
+            background: var(--primary); color: #fff; border: none; padding: 0 40px; height: 55px;
+            font-family: 'Orbitron', sans-serif; font-size: 0.8rem; font-weight: 700; cursor: pointer;
+            letter-spacing: 3px; transition: 0.3s;
+        }
+        #transmit-btn:hover { transform: scale(1.05); box-shadow: 0 0 30px var(--primary); }
 
-    button:hover {
-      transform: scale(1.05);
-      box-shadow: 0 5px 15px rgba(168, 85, 247, 0.4);
-    }
-
-    button svg {
-      fill: white;
-      width: 20px;
-      height: 20px;
-    }
-
-    .loading-dots {
-      display: inline-flex;
-      gap: 4px;
-      align-items: center;
-      height: 20px;
-    }
-
-    .dot {
-      width: 6px;
-      height: 6px;
-      background: #a855f7;
-      border-radius: 50%;
-      animation: bounce 1.4s infinite ease-in-out both;
-    }
-
-    .dot:nth-child(1) { animation-delay: -0.32s; }
-    .dot:nth-child(2) { animation-delay: -0.16s; }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes bounce {
-      0%, 80%, 100% { transform: scale(0); }
-      40% { transform: scale(1); }
-    }
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        /* Processing Indicator */
+        #processing-indicator { display: none; padding: 10px 40px; font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: var(--primary); align-items: center; gap: 10px; }
+        .dots { display: flex; gap: 4px; }
+        .dot-ani { width: 4px; height: 4px; background: var(--primary); border-radius: 50%; animation: dotPulse 1s infinite; }
+        .dot-ani:nth-child(2) { animation-delay: 0.2s; }
+        .dot-ani:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes dotPulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+        
+        .cursor { display: inline-block; width: 8px; height: 1.2em; background: var(--primary); vertical-align: middle; margin-left: 5px; animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    </style>
 </head>
-
 <body>
 
-  <div class="chat-container">
-    <div class="header">
-      <div class="bot-avatar">🤖</div>
-      <h2>Brainy AI</h2>
-    </div>
+    <div class="grid-bg"></div>
 
-    <div class="chat-box" id="chatBox">
-      <div class="message ai">
-        <div class="bubble">Hello! I am Brainy AI. Need help with studying, coding, or just want to chat? Ask me anything!</div>
-      </div>
-    </div>
-
-    <div class="input-area">
-      <input type="file" id="pdfUpload" accept=".pdf" style="display: none;" onchange="uploadPdf()" />
-      <button class="upload-btn" onclick="document.getElementById('pdfUpload').click()">
-        <svg viewBox="0 0 24 24"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 015 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 005 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
-      </button>
-      <input type="text" id="msg" placeholder="Ask anything..." onkeypress="handleKey(event)" />
-      <button onclick="sendMsg()">
-        <svg viewBox="0 0 24 24">
-          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-        </svg>
-      </button>
-    </div>
-  </div>
-
-  <script>
-    // Store session globally
-    let userSession = localStorage.getItem('brainy_session_id') || null;
-
-    async function sendMsg() {
-      let inputField = document.getElementById("msg");
-      let message = inputField.value.trim();
-      
-      if (!message) return;
-
-      // Clear input
-      inputField.value = "";
-      
-      // Add user's message
-      addMessage(message, "user");
-
-      // Show typing indicator
-      let loadingId = addTypingIndicator();
-
-      try {
-        let res = await fetch("/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ 
-            message: message,
-            session_id: userSession
-          })
-        });
-
-        if (!res.ok) throw new Error("Network issue");
-
-        let data = await res.json();
-        
-        // Store session ID
-        if (data.session_id && !userSession) {
-          userSession = data.session_id;
-          localStorage.setItem('brainy_session_id', userSession);
-        }
-        
-        // Remove typing indicator and add AI response
-        removeMessage(loadingId);
-        addMessage(data.reply, "ai");
-        
-      } catch (error) {
-        removeMessage(loadingId);
-        addMessage("⚠️ Oops! Something went wrong.", "ai");
-      }
-    }
-
-    function addMessage(text, sender) {
-      let chatBox = document.getElementById("chatBox");
-      
-      let msgDiv = document.createElement("div");
-      msgDiv.className = `message ${sender}`;
-      
-      let bubble = document.createElement("div");
-      bubble.className = "bubble";
-      bubble.innerHTML = sender === "ai" ? marked.parse(text) : text;
-      
-      msgDiv.appendChild(bubble);
-      chatBox.appendChild(msgDiv);
-      
-      // Scroll to bottom
-      chatBox.scrollTop = chatBox.scrollHeight;
-      return msgDiv;
-    }
-
-    function addTypingIndicator() {
-      let chatBox = document.getElementById("chatBox");
-      
-      let msgDiv = document.createElement("div");
-      msgDiv.className = "message ai";
-      msgDiv.id = "typing-indicator-" + Date.now();
-      
-      let bubble = document.createElement("div");
-      bubble.className = "bubble";
-      bubble.innerHTML = `
-        <div class="loading-dots">
-          <div class="dot"></div>
-          <div class="dot"></div>
-          <div class="dot"></div>
+    <aside class="sidebar" id="sidebar">
+        <button class="toggle-btn" id="sidebar-toggle" title="TOGGLE_SYSTEM_PANEL">≡</button>
+        <div class="sidebar-header">
+            <h2>ULTRON</h2>
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                NEURAL_LINK_ACTIVE
+            </div>
         </div>
-      `;
-      
-      msgDiv.appendChild(bubble);
-      chatBox.appendChild(msgDiv);
-      chatBox.scrollTop = chatBox.scrollHeight;
-      
-      return msgDiv.id;
-    }
+        <ul class="menu-list">
+            <li class="menu-item" onclick="executeCommand('reboot')" data-icon="R"><span>REBOOT_SYSTEM</span></li>
+            <li class="menu-item" onclick="executeCommand('purge_data')" data-icon="P"><span>PURGE_DATA</span></li>
+            <li class="menu-item" onclick="executeCommand('status')" data-icon="S"><span>SYSTEM_STATUS</span></li>
+        </ul>
+    </aside>
 
-    function removeMessage(id) {
-      let el = document.getElementById(id);
-      if(el) el.remove();
-    }
+    <main class="main-console">
+        <header class="header">
+            <div>CORE_INTERFACE_v4.0 // TERMINAL_ACTIVE</div>
+            <div id="clock">00:00:00</div>
+        </header>
 
-    function handleKey(event) {
-      if (event.key === "Enter") {
-        sendMsg();
-      }
-    }
+        <div id="chat-window"></div>
 
-    async function uploadPdf() {
-      let fileInput = document.getElementById("pdfUpload");
-      let file = fileInput.files[0];
-      if (!file) return;
+        <div id="processing-indicator">
+            ULTRON_PROCESSING
+            <div class="dots"><div class="dot-ani"></div><div class="dot-ani"></div><div class="dot-ani"></div></div>
+        </div>
 
-      addMessage(`Uploading ${file.name}...`, "user");
-      let loadingId = addTypingIndicator();
+        <div class="input-container">
+            <div class="input-wrapper">
+                <label for="pdf-upload" class="upload-btn" title="INJECT_DATA_MODULE">📎</label>
+                <input type="file" id="pdf-upload" accept=".pdf" style="display: none;">
+                <input type="text" id="user-input" placeholder="INITIATE COMMAND SEQUENCE..." autocomplete="off">
+                <button id="transmit-btn" onclick="handleTransmit()">TRANSMIT</button>
+            </div>
+        </div>
+    </main>
 
-      let formData = new FormData();
-      formData.append("file", file);
+    <script>
+        const chatWindow = document.getElementById('chat-window');
+        const userInput = document.getElementById('user-input');
+        const transmitBtn = document.getElementById('transmit-btn');
+        const processingIndicator = document.getElementById('processing-indicator');
+        const pdfUpload = document.getElementById('pdf-upload');
+        const clockDisplay = document.getElementById('clock');
+        const sidebar = document.getElementById('sidebar');
+        const toggleBtn = document.getElementById('sidebar-toggle');
 
-      try {
-        let res = await fetch("/upload_pdf", {
-          method: "POST",
-          body: formData
-        });
-        
-        let data = await res.json();
-        removeMessage(loadingId);
-        
-        if (res.ok) {
-          addMessage(data.message, "ai");
-        } else {
-          addMessage("⚠️ " + data.error, "ai");
+        let currentSessionId = null;
+        let isProcessing = false;
+
+        // Toggle Sidebar
+        toggleBtn.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+
+        // System Clock
+        function updateClock() { clockDisplay.innerText = new Date().toTimeString().split(' ')[0]; }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function getTimestamp() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+
+        /**
+         * Adds a message to the terminal UI
+         * @param {string} sender - 'user', 'ai', or 'system'
+         * @param {string} text - Message content
+         * @param {boolean} typeEffect - If true, uses typing animation
+         */
+        async function addMessage(sender, text, typeEffect = false) {
+            const row = document.createElement('div');
+            row.className = `message-row ${sender}-row`;
+            
+            const header = document.createElement('div');
+            header.className = 'message-header';
+            header.innerHTML = `<span>${sender.toUpperCase()}</span><span class="timestamp">[${getTimestamp()}]</span>`;
+            
+            const msg = document.createElement('div');
+            msg.className = `message ${sender}-message`;
+            
+            if (sender !== 'system') row.appendChild(header);
+            row.appendChild(msg);
+            chatWindow.appendChild(row);
+
+            if (typeEffect) {
+                return await typeText(msg, text);
+            } else {
+                msg.innerText = text;
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+                return Promise.resolve();
+            }
         }
-      } catch (error) {
-        removeMessage(loadingId);
-        addMessage("⚠️ Failed to upload PDF.", "ai");
-      }
-      
-      fileInput.value = ""; // Reset input
-    }
-  </script>
 
+        async function typeText(element, text) {
+            element.innerHTML = '';
+            const cursor = document.createElement('span');
+            cursor.className = 'cursor';
+            element.appendChild(cursor);
+
+            const content = document.createElement('span');
+            element.insertBefore(content, cursor);
+
+            for (let i = 0; i < text.length; i++) {
+                content.innerHTML += text.charAt(i);
+                if (i % 3 === 0) chatWindow.scrollTop = chatWindow.scrollHeight;
+                await new Promise(r => setTimeout(r, 15));
+            }
+            cursor.remove();
+        }
+
+        /**
+         * Main Command Processor
+         */
+        async function executeCommand(input) {
+            if (isProcessing) return;
+            const cmd = input.toLowerCase().trim();
+            if (!cmd) return;
+
+            // Log user command
+            await addMessage('user', cmd);
+            userInput.value = '';
+
+            // Terminal Delay Simulation
+            setLoading(true);
+            await new Promise(r => setTimeout(r, Math.random() * 700 + 500));
+
+            // Core Command Switch
+            switch (cmd) {
+                case 'help':
+                case 'h':
+                    setLoading(false);
+                    await addMessage('ai', 'AVAILABLE COMMANDS:\n- HELP / H: Show this list\n- CLEAR / CLS: Clear terminal\n- REBOOT / RESTART: Reboot system core\n- PURGE_DATA: Reset neural session\n- STATUS: System diagnostics\n- TIME: Current system clock', true);
+                    break;
+
+                case 'clear':
+                case 'cls':
+                    setLoading(false);
+                    chatWindow.innerHTML = '';
+                    break;
+
+                case 'purge_data':
+                    setLoading(false);
+                    currentSessionId = null;
+                    chatWindow.innerHTML = '';
+                    await addMessage('system', 'NEURAL SESSION PURGED. DATA CACHE CLEARED.');
+                    await addMessage('ai', 'Session data has been erased. Awaiting new instructions.', true);
+                    break;
+
+                case 'reboot':
+                case 'restart':
+                    setLoading(false);
+                    await addMessage('system', 'SHUTTING DOWN SYSTEM CORE...');
+                    await new Promise(r => setTimeout(r, 800));
+                    chatWindow.innerHTML = '';
+                    await addMessage('system', 'REINITIALIZING NEURAL NETWORKS...');
+                    await new Promise(r => setTimeout(r, 1200));
+                    currentSessionId = null;
+                    await addMessage('ai', 'SYSTEM ONLINE. ULTRON CORE v4.0 STABILIZED.', true);
+                    break;
+
+                case 'status':
+                    setLoading(false);
+                    const stats = `CPU_LOAD: ${Math.floor(Math.random() * 20 + 20)}%\nMEMORY_USAGE: ${Math.floor(Math.random() * 30 + 40)}%\nNEURAL_LINK: ACTIVE\nENCRYPTION: LEVEL_9\nCORE_TEMP: OPTIMAL`;
+                    await addMessage('ai', stats, true);
+                    break;
+
+                case 'time':
+                    setLoading(false);
+                    await addMessage('ai', `Current System Time: ${getTimestamp()}`, true);
+                    break;
+
+                default:
+                    // If not a system command, send to AI Backend
+                    await sendToAI(cmd);
+                    break;
+            }
+        }
+
+        async function sendToAI(text) {
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, session_id: currentSessionId }),
+                });
+                const data = await response.json();
+                if (data.session_id) currentSessionId = data.session_id;
+                
+                setLoading(false);
+                await addMessage('ai', data.reply, true);
+            } catch (error) {
+                setLoading(false);
+                await addMessage('ai', 'CRITICAL ERROR: NEURAL LINK INTERRUPTED. SYSTEM REBOOT RECOMMENDED.', true);
+            }
+        }
+
+        function setLoading(isLoading) {
+            isProcessing = isLoading;
+            transmitBtn.disabled = isLoading;
+            processingIndicator.style.display = isLoading ? 'flex' : 'none';
+        }
+
+        function handleTransmit() {
+            executeCommand(userInput.value);
+        }
+
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleTransmit();
+        });
+
+        // PDF Upload
+        pdfUpload.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            await addMessage('system', `INJECTING DATA MODULE: ${file.name.toUpperCase()}`);
+            setLoading(true);
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/upload_pdf', { method: 'POST', body: formData });
+                const data = await response.json();
+                setLoading(false);
+                if (data.message) await addMessage('ai', 'DATA MODULE INTEGRATED. KNOWLEDGE CORE UPDATED.', true);
+                else await addMessage('ai', `INTEGRATION FAILED: ${data.error}`, true);
+            } catch (error) {
+                setLoading(false);
+                await addMessage('ai', 'COMMUNICATION ERROR DURING INJECTION.', true);
+            }
+        });
+
+        // Initial Load
+        window.onload = () => {
+            addMessage('ai', 'CONNECTION ESTABLISHED. ULTRON SYSTEM v4.0 ACTIVE. AWAITING COMMANDS.', true);
+        };
+    </script>
 </body>
 </html>

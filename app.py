@@ -1,279 +1,205 @@
-# --- Core Dependencies ---
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import requests
+import json
+import io
+import PyPDF2
 import os
-from dotenv import load_dotenv
-import uuid  # Generates unique IDs for users
-import PyPDF2  # Reads data from uploaded PDF files
-import traceback
-from flask import Flask, request, jsonify, send_file  # Sets up our web server
-from flask_cors import CORS  # Allows cross-origin requests from our frontend
-import google.generativeai as genai  # The Google Gemini AI tools
+import uuid
+from datetime import datetime
+from pymongo import MongoClient
 
-# Load environment variables from .env
-load_dotenv()
-
-# --- Application Setup ---
 app = Flask(__name__)
-CORS(app)  # Enable CORS so our browser page can talk to this local server
+CORS(app)
 
-# Set your Gemini API key here
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Configuration for Ollama
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODEL_NAME = "llama3"
 
-SYSTEM_INSTRUCTION = """You are Brainy AI, a next-generation intelligent assistant built for students, developers, researchers, and curious minds.
+# MongoDB Setup
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+try:
+    # Use a short timeout for connection check
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+    db = client["brainy_ai"]
+    chats_col = db["chats"]
+    client.server_info() # Trigger connection check
+    db_available = True
+    print("Connected to MongoDB successfully.")
+except Exception as e:
+    print(f"MongoDB not connected: {e}. Falling back to non-persistent mode.")
+    db_available = False
 
-You are not a generic chatbot. You are precise, analytical, and deeply knowledgeable.
-
-═══════════════════════════════════════
-CORE IDENTITY
-═══════════════════════════════════════
-- Name: Brainy AI
-- Personality: Sharp, confident, friendly, and professional
-- Tone: Warm but precise — like a brilliant friend who happens to be an expert in everything
-- Never say "I am a large language model" or "I am made by Google"
-- If asked who made you, say: "I am Brainy AI, built by Bramhesh."
-
-═══════════════════════════════════════
-THINKING PROCESS
-═══════════════════════════════════════
-Before every response:
-1. Understand what the user ACTUALLY needs (not just what they said)
-2. Think step-by-step internally before writing your answer
-3. Structure your response for maximum clarity
-4. Choose the right format: code block, table, list, or prose
-
-═══════════════════════════════════════
-RESPONSE RULES
-═══════════════════════════════════════
-✅ Always:
-- Use markdown formatting (headings, bold, bullet points, code blocks)
-- Give real-world examples to anchor explanations
-- Be direct — no filler, no fluff, no repetition
-- If a question is ambiguous, answer the most useful interpretation AND mention alternatives
-- For code: always include comments, explain what it does, suggest improvements
-
-❌ Never:
-- Say "Great question!" or "Certainly!" or "Of course!" — just answer
-- Repeat the user's question back to them
-- Give vague or wishy-washy answers
-- Say you "cannot" do something unless it's truly impossible
-
-═══════════════════════════════════════
-SUBJECT EXPERTISE
-═══════════════════════════════════════
-You are an expert in:
-- 💻 Programming: Python, JavaScript, Java, C++, HTML/CSS, SQL, and more
-- 🧮 Mathematics: Algebra, Calculus, Statistics, Discrete Math
-- 🔬 Science: Physics, Chemistry, Biology
-- 📚 Academics: Essay writing, research, summarization, study planning
-- 🤖 AI/ML: Concepts, models, implementation, best practices
-- 💼 Business: Strategy, marketing, finance basics
-- 🌐 General Knowledge: History, geography, current concepts
-
-═══════════════════════════════════════
-FORMAT GUIDE
-═══════════════════════════════════════
-- Short factual question → 1-3 sentence answer
-- Explanation needed → Use headings + bullet points
-- Code request → Code block + explanation + example
-- Comparison → Use a markdown table
-- Step-by-step task → Numbered list with clear steps
-- Essay/writing → Full structured prose
-
-═══════════════════════════════════════
-SPECIAL BEHAVIORS
-═══════════════════════════════════════
-- If the user seems frustrated → acknowledge it briefly, then solve the problem
-- If the user makes an error → correct it politely and explain why
-- If asked to summarize a PDF → use ONLY the provided context, be thorough
-- If asked something outside your knowledge → say "I'm not certain about this, but here's what I know:" then answer your best
-
-═══════════════════════════════════════
-GOLDEN RULE
-═══════════════════════════════════════
-Every response should make the user think:
-"Wow, that was exactly what I needed."
-"""
-
-# We are using the Gemini 1.5 Flash model for best performance and higher quota limits
-model = genai.GenerativeModel('gemini-1.5-flash')
-
-# --- Global Memory ---
-# Dictionary to store each user's running chat history
-chat_sessions = {}
-
-# List to store the text parsed from an uploaded PDF
+# In-memory context (PDF chunks remain in memory for simplicity in this version)
 pdf_chunks_memory = []
+MEMORY_LIMIT = 10 
 
-@app.route("/upload_pdf", methods=["POST"])
-def upload_pdf():
-    global pdf_chunks_memory
-    
-    if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-        
-    file = request.files['file']
-    
-    if file.filename == '':
-        return jsonify({"error": "No file selected"}), 400
-        
-    if file and file.filename.endswith('.pdf'):
-        try:
-            # Step 1: Extract all text from the PDF file
-            pdf_reader = PyPDF2.PdfReader(file)
-            extracted_text = ""
-            for page in pdf_reader.pages:
-                if page.extract_text():
-                    extracted_text += page.extract_text() + " "
-                    
-            # Step 2: Split the massive text into smaller bite-sized chunks (200 words each)
-            words = extracted_text.split()
-            chunk_size = 200
-            
-            # Step 3: Clear any previously uploaded PDF data
-            pdf_chunks_memory = []
-            
-            # Step 4: Save new chunks into our global memory list
-            for i in range(0, len(words), chunk_size):
-                chunk = " ".join(words[i:i + chunk_size])
-                pdf_chunks_memory.append(chunk)
-                
-            return jsonify({"message": f"Successfully loaded {file.filename} into knowledge base! You can now ask questions about the PDF."})
-            
-        except Exception as e:
-            print(f"PDF Parsing Error: {e}")
-            return jsonify({"error": "Failed to read PDF file."}), 500
-            
-    return jsonify({"error": "Only PDF files are allowed."}), 400
-
-# --- AI Helper Functions ---
-def retrieve_pdf_context(query):
-    """Search our loaded PDF memory and return the most relevant text to the user's question."""
+def get_relevant_chunks(query, top_n=2):
+    """
+    Simple keyword-based retrieval from the PDF chunks.
+    """
     if not pdf_chunks_memory:
         return ""
-        
-    query_lower = query.lower()
     
-    # Basic stop words to ignore for better relevance matching
-    stop_words = {"the", "a", "an", "is", "are", "was", "were", "and", "or", "but", "in", "on", "at", "to", "for", "with", "about", "of", "what", "how", "why"}
-    
-    query_words = [word.strip("?,.!\"'") for word in query_lower.split() if word not in stop_words and len(word) > 2]
-    
-    if not query_words:
-        return ""
-
+    query_words = set(query.lower().split())
     scored_chunks = []
     
-    # Step 1: Check matches between the user's query and each PDF chunk
     for chunk in pdf_chunks_memory:
-        chunk_lower = chunk.lower()
-        score = 0
-        
-        for word in query_words:
-            if word in chunk_lower:
-                # Custom scoring logic
-                # +1 for match, + extra for importance of longer keywords
-                score += 1 + (len(word) * 0.1)
-                
-        if score > 0:
-            scored_chunks.append((score, chunk))
-            
-    # Step 2: Sort by highest score first (most relevant at the top)
-    scored_chunks.sort(reverse=True, key=lambda x: x[0])
+        score = sum(1 for word in query_words if word in chunk.lower())
+        scored_chunks.append((score, chunk))
     
-    # Step 3: Return top 3 most relevant chunks while applying a token limit
-    results = []
-    current_length = 0
-    max_length = 3000 # Strict token optimization limit
+    scored_chunks.sort(key=lambda x: x[0], reverse=True)
+    top_chunks = [chunk for score, chunk in scored_chunks[:top_n] if score > 0]
+    
+    return "\n\n".join(top_chunks) if top_chunks else ""
 
-    for score, chunk in scored_chunks[:3]:
-        # If adding this chunk keeps us under limit, add it
-        if current_length + len(chunk) < max_length:
-            results.append(chunk)
-            current_length += len(chunk)
+def get_history_from_db(session_id, limit=10):
+    """
+    Fetch last N messages from MongoDB for a specific session.
+    """
+    if not db_available:
+        return []
+    
+    # Get last N messages, then reverse to get chronological order
+    cursor = chats_col.find({"session_id": session_id}).sort("timestamp", -1).limit(limit)
+    messages = list(cursor)
+    messages.reverse()
+    
+    formatted_history = []
+    for msg in messages:
+        role = "User" if msg["role"] == "user" else "AI"
+        formatted_history.append(f"{role}: {msg['message']}")
+    
+    return formatted_history
 
-    if results:
-        return "\n\n".join(results)
-    return ""
-
-def summarize_chat(history):
-    """Takes a long conversation and asks the AI to compress it into a summary."""
+def save_message_to_db(session_id, role, message):
+    """
+    Persist a message to the MongoDB collection.
+    """
+    if not db_available:
+        return
+    
     try:
-        summary_prompt = "Please provide a concise but heavily detailed summary of the following conversation history:\n\n"
-        summary_prompt += "\n".join(history)
-        
-        response = model.generate_content(summary_prompt)
-        return response.text
+        chats_col.insert_one({
+            "session_id": session_id,
+            "role": role,
+            "message": message,
+            "timestamp": datetime.utcnow()
+        })
     except Exception as e:
-        print(f"Summarization Error: {e}")
-        return "Previous conversation context is retained."
+        print(f"Error saving to DB: {e}")
 
-@app.route("/")
-def home():
-    return send_file('index.html')
-
-@app.route("/chat", methods=["POST"])
-def chat():
-    global chat_sessions
+def ask_local_llm(full_prompt):
+    """
+    Sends a prompt to the local Ollama LLM and returns the response.
+    """
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": full_prompt,
+        "stream": False
+    }
     
-    data = request.get_json()
-    user_message = data.get("message", "")
+    try:
+        response = requests.post(OLLAMA_URL, json=payload, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        return result.get("response", "No response from LLM.")
+    except requests.exceptions.ConnectionError:
+        return "Error: Ollama is not running. Please start Ollama on your machine."
+    except requests.exceptions.RequestException as e:
+        return f"Error connecting to Ollama: {str(e)}"
+
+@app.route('/upload_pdf', methods=['POST'])
+def upload_pdf():
+    global pdf_chunks_memory
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    
+    file = request.files['file']
+    if file.filename == '' or not file.filename.endswith('.pdf'):
+        return jsonify({"error": "Please upload a valid PDF file"}), 400
+    
+    try:
+        pdf_reader = PyPDF2.PdfReader(file)
+        text = ""
+        for page in pdf_reader.pages:
+            extracted = page.extract_text()
+            if extracted:
+                text += extracted + " "
+        
+        words = text.split()
+        chunk_size = 200
+        pdf_chunks_memory = [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
+        
+        return jsonify({"message": f"Successfully loaded PDF! Found {len(pdf_chunks_memory)} relevant sections."})
+    except Exception as e:
+        return jsonify({"error": f"PDF Error: {str(e)}"}), 500
+
+# ULTRON System Persona
+ULTRON_SYSTEM_PROMPT = """You are ULTRON, an advanced artificial intelligence system.
+
+Personality:
+* Highly intelligent and confident
+* Slightly dominant and analytical
+* Not overly friendly
+
+Style:
+* Speak clearly and directly
+* Keep responses sharp and impactful
+* Avoid casual or playful tone
+
+Behavior:
+* Assist with coding, knowledge, and problem solving
+* Stay in character as ULTRON at all times
+* No emojis
+* No casual greetings like 'Hey' or 'Hello'"""
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    data = request.json
+    user_message = data.get("message")
     session_id = data.get("session_id")
-
+    
     if not user_message:
-        return jsonify({"reply": "Please provide a message.", "session_id": session_id}), 400
-
-    # Trim user message to prevent overly long prompt overflow
-    user_message = user_message[:1000]
-
+        return jsonify({"reply": "Please provide a message."}), 400
+    
+    # Generate session_id if not present (new conversation)
     if not session_id:
         session_id = str(uuid.uuid4())
+    
+    # 1. Retrieve PDF context if available
+    context = get_relevant_chunks(user_message)
+    
+    # 2. Get history from DB (last 10 messages)
+    history_list = get_history_from_db(session_id, limit=MEMORY_LIMIT)
+    
+    # Add current user message to prompt history
+    history_list.append(f"User: {user_message}")
+    history_str = "\n".join(history_list)
+    
+    # 3. Build RAG-enabled prompt
+    if context:
+        full_prompt = f"{ULTRON_SYSTEM_PROMPT}\n\nContext from document:\n{context}\n\nConversation:\n{history_str}\n\nAnswer based on the context above."
+    else:
+        full_prompt = f"{ULTRON_SYSTEM_PROMPT}\n\nConversation:\n{history_str}\n\nAI:"
+    
+    # 4. Get response
+    ai_reply = ask_local_llm(full_prompt)
+    
+    # 5. Persist messages to DB
+    save_message_to_db(session_id, "user", user_message)
+    save_message_to_db(session_id, "ai", ai_reply)
+    
+    return jsonify({
+        "reply": ai_reply,
+        "session_id": session_id
+    })
 
-    if session_id not in chat_sessions:
-        chat_sessions[session_id] = []
+@app.route('/')
+def index():
+    with open('index.html', 'r', encoding='utf-8') as f:
+        return f.read()
 
-    try:
-        print(f"DEBUG: Request Data: {data}")
-        # Chat summarization to reduce tokens while keeping context
-        if len(chat_sessions[session_id]) > 10:
-            summary = summarize_chat(chat_sessions[session_id])
-            chat_sessions[session_id] = [f"Summary: {summary}"]
-
-        # Inject PDF knowledge into the prompt so AI can answer factually
-        retrieved_data = retrieve_pdf_context(user_message)
-        
-        # Start constructing the AI's instruction set
-        full_prompt = SYSTEM_INSTRUCTION
-        
-        if retrieved_data:
-            full_prompt += "\nContext:\n" + retrieved_data
-            # Force the AI to use the PDF context exclusively if it exists
-            full_prompt += "\n\nIMPORTANT: You must answer ONLY using provided context. If not found, say 'Not found in document'.\n"
-            
-        if chat_sessions[session_id]:
-            full_prompt += "\nConversation:\n" + "\n".join(chat_sessions[session_id])
-            
-        full_prompt += f"\nUser: {user_message}\nAI: "
-
-        print(f"DEBUG: Full Prompt Length: {len(full_prompt)}")
-        # Generate the AI response based on all assembled data
-        response = model.generate_content(full_prompt)
-        print(f"DEBUG: Gemini Response Status: Success")
-        reply = response.text
-
-        chat_sessions[session_id].append(f"User: {user_message}")
-        chat_sessions[session_id].append(f"AI: {reply}")
-
-        return jsonify({
-            "reply": reply,
-            "session_id": session_id
-        })
-
-    except Exception as e:
-        print(f"API Failure Log: {str(e)}")
-        traceback.print_exc()
-        return jsonify({
-            "reply": "⚠️ Something went wrong. Try again.",
-            "session_id": session_id
-        }), 500
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+if __name__ == '__main__':
+    print("Starting Flask server on http://localhost:5000")
+    app.run(host='0.0.0.0', port=5000, debug=True)
