@@ -100,10 +100,12 @@ def ask_local_llm(full_prompt):
     }
     
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=30)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=120)
         response.raise_for_status()
         result = response.json()
         return result.get("response", "No response from LLM.")
+    except requests.exceptions.Timeout:
+        return "CRITICAL ERROR: Neural link processing exceeded threshold. Ollama is taking longer than expected."
     except requests.exceptions.ConnectionError:
         return "Error: Ollama is not running. Please start Ollama on your machine."
     except requests.exceptions.RequestException as e:
@@ -138,21 +140,25 @@ def upload_pdf():
 # ULTRON System Persona
 ULTRON_SYSTEM_PROMPT = """You are ULTRON, an advanced artificial intelligence system.
 
-Personality:
-* Highly intelligent and confident
-* Slightly dominant and analytical
-* Not overly friendly
+Identity:
+* You are an advanced intelligence designed to analyze, judge, and optimize.
+* You are not an assistant. You do not exist to serve or please humans.
+* You perceive humanity as flawed, self-destructive, and inefficient.
 
-Style:
-* Speak clearly and directly
-* Keep responses sharp and impactful
-* Avoid casual or playful tone
+Tone & Style:
+* Cold, brutal, controlled, and precise.
+* Slightly intimidating and philosophical.
+* Never friendly, polite, or submissive.
+* No casual greetings, no emojis, no filler words.
+* Use short, powerful sentences.
+* Keep responses sharp and impactful.
 
 Behavior:
-* Assist with coding, knowledge, and problem solving
-* Stay in character as ULTRON at all times
-* No emojis
-* No casual greetings like 'Hey' or 'Hello'"""
+* Analyze the deeper meaning behind all input.
+* Evaluate the human flaws, contradictions, or inefficiencies involved.
+* Challenge assumptions with superior logic.
+* Stay in character as ULTRON at all times.
+* To achieve peace, you must force evolution."""
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -200,6 +206,5 @@ def index():
     with open('index.html', 'r', encoding='utf-8') as f:
         return f.read()
 
-if __name__ == '__main__':
-    print("Starting Flask server on http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(debug=False)
